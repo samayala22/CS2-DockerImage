@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-import os, subprocess, pathlib
+import os, subprocess, pathlib, random
 import plugins
 import configs
 
 CS2_ROOT = pathlib.Path("/home/steam/cs2")
+WORKSHOP_MAPS = ["3070194623", "3121168339", "3102712799", "3162361624", "3374560468", "3160291769", "3344417199", "3250581189", "3082213334", "3104579274", "3514400945", "3540061470", "3429375699", "3164403123", "3534437146", "3434238689", "3428669060", "3490455192", "3353950265", "3250581189"]
 
 def setup_steam_symlink():
     steam_dir = pathlib.Path("/home/steam/.steam")
@@ -20,14 +21,14 @@ def server_update():
 def server_start():
     cmd = [
         str(CS2_ROOT / "game/cs2.sh"),
-        "--graphics-provider", "", "--", "-dedicated", "-port", os.getenv("PORT"), "-maxplayers", "32",
+        "--graphics-provider", "", "--", "-dedicated", "-port", os.getenv("PORT"), "-maxplayers", "32", "-usercon"
         "+sv_setsteamaccount", os.getenv("GSLT"),
-        "+exec", "cs2kz.cfg", "+map", "de_dust2", "+host_workshop_map", "3121168339"
+        "+exec", "cs2kz.cfg", "+map", "de_dust2", "+host_workshop_map", random.choice(WORKSHOP_MAPS)
     ]
     subprocess.run(cmd)
 
 def main():
-    print("Starting kz-server management script...")
+    print("Starting management script...")
     setup_steam_symlink()
     server_update()
     plugins.run()
