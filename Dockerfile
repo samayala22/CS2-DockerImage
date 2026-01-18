@@ -23,6 +23,6 @@ RUN python3 -m pip install --no-cache-dir pyjson5 \
 ENV PATH="/opt/steamcmd:${PATH}"
 ENV PYTHONUNBUFFERED=1
 
-COPY --chown=steam:steam *.py /src/
+COPY --chown=steam:steam src/*.py /src/
 
 ENTRYPOINT ["python3", "/src/entrypoint.py"]
