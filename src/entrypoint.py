@@ -21,7 +21,7 @@ def server_update():
 def server_start():
     cmd = [
         str(CS2_ROOT / "game/cs2.sh"),
-        "--graphics-provider", "", "--", "-dedicated", "-port", os.getenv("PORT"), "-maxplayers", "32", "-usercon"
+        "--graphics-provider", "", "--", "-dedicated", "-port", os.getenv("PORT"), "-maxplayers", "32", "-usercon",
         "+sv_setsteamaccount", os.getenv("GSLT"),
         "+exec", "cs2kz.cfg", "+map", "de_dust2", "+host_workshop_map", random.choice(WORKSHOP_MAPS)
     ]
