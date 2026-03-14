@@ -9,20 +9,22 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m -s /bin/bash steam \
-    && mkdir -p /opt/steamcmd \
-    && chown steam:steam /opt/steamcmd
+RUN useradd -m -s /bin/bash -u 1000 steam
 
 USER steam
 WORKDIR /home/steam
 
 RUN python3 -m pip install --no-cache-dir pyjson5 \
-    && cd /opt/steamcmd \
+    && mkdir -p /home/steam/steamcmd \
+    && cd /home/steam/steamcmd \
     && curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf -
 
-ENV PATH="/opt/steamcmd:${PATH}"
+ENV PATH="/home/steam/steamcmd:${PATH}"
 ENV PYTHONUNBUFFERED=1
 
 COPY --chown=steam:steam src/*.py /src/
+
+HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
+    CMD python3 /src/healthcheck.py
 
 ENTRYPOINT ["python3", "/src/entrypoint.py"]

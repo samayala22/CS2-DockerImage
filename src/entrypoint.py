@@ -12,7 +12,7 @@ def setup_steam_symlink():
     if steam_dir.exists(): return
     steam_dir.mkdir(exist_ok=True)
     sdk_link = steam_dir / "sdk64"
-    os.symlink("/opt/steamcmd/linux64", sdk_link)
+    os.symlink("/home/steam/steamcmd/linux64", sdk_link)
 
 def server_update():
     cmd = ["steamcmd.sh", "+force_install_dir", str(CS2_ROOT), "+login", "anonymous", "+app_update", "730", "+quit"]
