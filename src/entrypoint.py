@@ -21,10 +21,14 @@ def ensure_steamcmd():
 
 def setup_steam_symlink():
     steam_dir = pathlib.Path("/home/steam/.steam")
-    if steam_dir.exists(): return
     steam_dir.mkdir(exist_ok=True)
     sdk_link = steam_dir / "sdk64"
-    os.symlink(str(STEAMCMD_DIR / "linux64"), sdk_link)
+    target = STEAMCMD_DIR / "linux64"
+    if sdk_link.is_symlink():
+        if sdk_link.resolve() == target.resolve():
+            return
+        sdk_link.unlink()
+    os.symlink(str(target), sdk_link)
 
 def server_update():
     cmd = [str(STEAMCMD_DIR / "steamcmd.sh"), "+force_install_dir", str(CS2_ROOT), "+login", "anonymous", "+app_update", "730", "+quit"]
