@@ -7,15 +7,27 @@ import configs
 CS2_ROOT = pathlib.Path("/home/steam/cs2")
 WORKSHOP_MAPS = ["3070194623", "3121168339", "3102712799", "3162361624", "3374560468", "3160291769", "3344417199", "3250581189", "3082213334", "3104579274", "3514400945", "3540061470", "3429375699", "3164403123", "3534437146", "3434238689", "3428669060", "3490455192", "3353950265", "3250581189"]
 
+STEAMCMD_DIR = pathlib.Path("/home/steam/steamcmd")
+
+def ensure_steamcmd():
+    """Install SteamCMD if missing (volume may overlay the image layer)."""
+    if (STEAMCMD_DIR / "steamcmd.sh").exists():
+        return
+    STEAMCMD_DIR.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["bash", "-c", f'curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf - -C {STEAMCMD_DIR}'],
+        check=True,
+    )
+
 def setup_steam_symlink():
     steam_dir = pathlib.Path("/home/steam/.steam")
     if steam_dir.exists(): return
     steam_dir.mkdir(exist_ok=True)
     sdk_link = steam_dir / "sdk64"
-    os.symlink("/home/steam/steamcmd/linux64", sdk_link)
+    os.symlink(str(STEAMCMD_DIR / "linux64"), sdk_link)
 
 def server_update():
-    cmd = ["steamcmd.sh", "+force_install_dir", str(CS2_ROOT), "+login", "anonymous", "+app_update", "730", "+quit"]
+    cmd = [str(STEAMCMD_DIR / "steamcmd.sh"), "+force_install_dir", str(CS2_ROOT), "+login", "anonymous", "+app_update", "730", "+quit"]
     subprocess.run(cmd)
 
 def server_start():
@@ -29,6 +41,7 @@ def server_start():
 
 def main():
     print("Starting management script...")
+    ensure_steamcmd()
     setup_steam_symlink()
     server_update()
     plugins.run()

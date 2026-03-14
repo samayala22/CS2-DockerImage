@@ -14,12 +14,8 @@ RUN useradd -m -s /bin/bash -u 1000 steam
 USER steam
 WORKDIR /home/steam
 
-RUN python3 -m pip install --no-cache-dir pyjson5 \
-    && mkdir -p /home/steam/steamcmd \
-    && cd /home/steam/steamcmd \
-    && curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxvf -
+RUN python3 -m pip install --no-cache-dir pyjson5
 
-ENV PATH="/home/steam/steamcmd:${PATH}"
 ENV PYTHONUNBUFFERED=1
 
 COPY --chown=steam:steam src/*.py /src/
