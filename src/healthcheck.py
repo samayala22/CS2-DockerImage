@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-import socket, sys, os
+import socket, sys, os, pathlib
+
+if not pathlib.Path("/tmp/server_started").exists():
+    sys.exit(0)
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.settimeout(5)
-sock.sendto(b'\xFF\xFF\xFF\xFF\x54Source Engine Query\x00', ('127.0.0.1', int(os.getenv("PORT"))))
+sock.sendto(b'\xFF\xFF\xFF\xFF\x54Source Engine Query\x00', ('127.0.0.1', int(os.environ["PORT"])))
 try:
     sock.recvfrom(4096)
     sys.exit(0)

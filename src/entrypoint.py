@@ -32,16 +32,16 @@ def setup_steam_symlink():
 
 def server_update():
     cmd = [str(STEAMCMD_DIR / "steamcmd.sh"), "+force_install_dir", str(CS2_ROOT), "+login", "anonymous", "+app_update", "730", "+quit"]
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
 
 def server_start():
     cmd = [
         str(CS2_ROOT / "game/cs2.sh"),
-        "--graphics-provider", "", "--", "-dedicated", "-port", os.getenv("PORT"), "-maxplayers", "32", "-usercon",
-        "+sv_setsteamaccount", os.getenv("GSLT"),
+        "--graphics-provider", "", "--", "-dedicated", "-port", os.environ["PORT"], "-maxplayers", "32", "-usercon",
+        "+sv_setsteamaccount", os.environ["GSLT"],
         "+exec", "cs2kz.cfg", "+map", "de_dust2", "+host_workshop_map", random.choice(WORKSHOP_MAPS)
     ]
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
 
 def main():
     print("Starting management script...")
@@ -50,6 +50,7 @@ def main():
     server_update()
     plugins.run()
     configs.run()
+    pathlib.Path("/tmp/server_started").touch()
     server_start()
 
 if __name__ == "__main__":
