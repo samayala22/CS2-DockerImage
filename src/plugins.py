@@ -13,6 +13,7 @@ CS2_ROOT = pathlib.Path("/home/steam/cs2")
 SERVER_CONFIG_DIR = pathlib.Path("/server-config")
 CS2_DIR = CS2_ROOT / "game" / "csgo"
 PLUGINS_FILE = SERVER_CONFIG_DIR / "plugins.json"
+LAST_MODIFIED_FILE = SERVER_CONFIG_DIR / ".plugins_last_modified.json"
 
 def load_plugins() -> list[dict]:
     """Load plugins configuration from plugins.json."""
@@ -23,6 +24,19 @@ def save_plugins(plugins: list[dict]):
     """Save plugins configuration to plugins.json."""
     with open(PLUGINS_FILE, "w") as f:
         json.dump(plugins, f, indent=4)
+
+def load_last_modified() -> dict[str, str]:
+    """Load cached GitHub Last-Modified timestamps from disk."""
+    try:
+        with open(LAST_MODIFIED_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_last_modified(last_modified: dict[str, str]):
+    """Save GitHub Last-Modified timestamps to disk."""
+    with open(LAST_MODIFIED_FILE, "w") as f:
+        json.dump(last_modified, f, indent=4)
 
 def match_asset(name: str, pattern: str) -> bool:
     """Match asset name against a pattern with wildcard support."""
@@ -86,18 +100,38 @@ def fetch_mmsdrop_latest(plugin: dict) -> tuple[str, str] | None:
     
     return (tag, url)
 
-def fetch_github_latest(plugin: dict, token: str) -> tuple[str, str] | None:
-    """Fetch latest tag and download url from github releases."""
+def fetch_github_latest(plugin: dict, token: str, last_modified: dict[str, str]) -> tuple[str, str] | None:
+    """Fetch latest tag and download url from github releases.
+    
+    Uses GitHub conditional requests (If-Modified-Since) so that 304
+    responses don't count against the API rate limit. Last-Modified is
+    used instead of ETags because GitHub returns inconsistent ETag
+    values for the /releases/latest endpoint.
+    """
     owner, repo = plugin["name"].split("/")
     asset_pattern = plugin["asset"]
+    plugin_key = plugin["name"]
     
     req_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     
+    cached_date = last_modified.get(plugin_key)
+    if cached_date:
+        headers["If-Modified-Since"] = cached_date
+    
     response = requests.get(req_url, headers=headers)
+    
+    if response.status_code == 304:
+        print(f"{plugin_key} release unchanged (cached)")
+        return None
+    
     if not response.ok:
         print(f"Failed to fetch latest release for {repo}: {response.status_code}")
         return None
+    
+    # cache the Last-Modified timestamp
+    if "Last-Modified" in response.headers:
+        last_modified[plugin_key] = response.headers["Last-Modified"]
     
     data = response.json()
     tag = data["tag_name"]
@@ -110,7 +144,7 @@ def fetch_github_latest(plugin: dict, token: str) -> tuple[str, str] | None:
     print(f"Failed to match asset pattern '{asset_pattern}' in {repo} release {tag}")
     return None
 
-def update_plugin(plugin: dict, token: str) -> bool:
+def update_plugin(plugin: dict, token: str, last_modified: dict[str, str]) -> bool:
     """Update a single plugin based on its origin."""
     name = plugin["name"]
     origin = plugin.get("origin", "github")
@@ -120,7 +154,7 @@ def update_plugin(plugin: dict, token: str) -> bool:
     if origin == "mmsdrop":
         result = fetch_mmsdrop_latest(plugin)
     elif origin == "github":
-        result = fetch_github_latest(plugin, token)
+        result = fetch_github_latest(plugin, token, last_modified)
     else:
         print(f"Unknown origin: {origin}")
         return False
@@ -151,14 +185,17 @@ def run():
     print("Checking for plugin updates...")
     token = os.getenv("GITHUB_APIKEY", "")
     plugins = load_plugins()
+    last_modified = load_last_modified()
     
     updated = False
     for plugin in plugins:
-        if update_plugin(plugin, token):
+        if update_plugin(plugin, token, last_modified):
             updated = True
     
     if updated:
         save_plugins(plugins)
+    
+    save_last_modified(last_modified)
     
     return 0
 
