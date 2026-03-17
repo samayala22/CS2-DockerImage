@@ -130,26 +130,24 @@ def apply_kv3(path: pathlib.Path, entries: dict):
     return True
 
 # -----------------------------------------------------------------------------
-# ini: simple key = value format, single level
+# ini / toml
 # -----------------------------------------------------------------------------
 
-def apply_ini(path: pathlib.Path, entries: dict):    
-    with open(path, 'r') as f:
-        content = f.read()
+def apply_ini(path: pathlib.Path, entries: dict):
+    file_str = ""
+    for section, value in entries.items():
+        file_str += f'[{section}]\n'
+        for key, val in value.items():
+            if isinstance(val, str):
+                val_str = f'"{val}"'
+            elif isinstance(val, bool):
+                val_str = "true" if val else "false"
+            else:
+                val_str = str(val)
+            file_str += f'{key} = {val_str}\n'
+        file_str += '\n'
 
-    for key, value in entries.items():
-        if isinstance(value, str):
-            val_str = f'"{value}"'
-        elif isinstance(value, bool):
-            val_str = "true" if value else "false"
-        else:
-            val_str = str(value)
-        
-        # match key = anything (to end of line)
-        pattern = rf'^(\s*{re.escape(key)}\s*=\s*).*$'
-        content = re.sub(pattern, rf'\g<1>{val_str}', content, count=1, flags=re.MULTILINE)
-    
-    atomic_write(path, content)
+    atomic_write(path, file_str)
     print(f"Updated {path.name}")
     return True
 
