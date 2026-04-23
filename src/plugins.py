@@ -5,7 +5,6 @@ import os
 import pathlib
 import shutil
 import requests
-from urllib.parse import urljoin
 import helpers
 import json
 
@@ -84,35 +83,17 @@ def download_and_extract(url: str, destination: pathlib.Path, depth: int = 0) ->
     
     return destination
 
-def fetch_mmsdrop_latest(plugin: dict) -> tuple[str, str] | None:
-    """Fetch latest tag and download url from mms alliedmods drop."""
-    base_url = "https://mms.alliedmods.net/mmsdrop/2.0/"
-    marker = plugin["asset"]
-    
-    response = requests.get(urljoin(base_url, marker))
-    if not response.ok:
-        print(f"Failed to fetch metamod marker: {response.status_code}")
-        return None
-    
-    name = response.text.strip()
-    tag = name.split("-")[2]  # extract version from filename
-    url = urljoin(base_url, name)
-    
-    return (tag, url)
-
 def fetch_github_latest(plugin: dict, token: str, last_modified: dict[str, str]) -> tuple[str, str] | None:
-    """Fetch latest tag and download url from github releases.
-    
+    """Fetch the latest matching tag and download URL from GitHub releases.
+
     Uses GitHub conditional requests (If-Modified-Since) so that 304
-    responses don't count against the API rate limit. Last-Modified is
-    used instead of ETags because GitHub returns inconsistent ETag
-    values for the /releases/latest endpoint.
+    responses don't count against the API rate limit.
     """
     owner, repo = plugin["name"].split("/")
     asset_pattern = plugin["asset"]
     plugin_key = plugin["name"]
     
-    req_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
+    req_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     
     cached_date = last_modified.get(plugin_key)
@@ -133,15 +114,16 @@ def fetch_github_latest(plugin: dict, token: str, last_modified: dict[str, str])
     if "Last-Modified" in response.headers:
         last_modified[plugin_key] = response.headers["Last-Modified"]
     
-    data = response.json()
-    tag = data["tag_name"]
-    
-    # find matching asset
-    for asset in data["assets"]:
-        if match_asset(asset["name"], asset_pattern):
-            return (tag, asset["browser_download_url"])
-    
-    print(f"Failed to match asset pattern '{asset_pattern}' in {repo} release {tag}")
+    for release in response.json():
+        if release.get("draft"):
+            continue
+
+        tag = release["tag_name"]
+        for asset in release.get("assets", []):
+            if match_asset(asset["name"], asset_pattern):
+                return (tag, asset["browser_download_url"])
+
+    print(f"Failed to match asset pattern '{asset_pattern}' in {repo} releases")
     return None
 
 def update_plugin(plugin: dict, token: str, last_modified: dict[str, str]) -> bool:
@@ -151,13 +133,10 @@ def update_plugin(plugin: dict, token: str, last_modified: dict[str, str]) -> bo
     old_tag = plugin["tag"]
     
     # fetch latest release info
-    if origin == "mmsdrop":
-        result = fetch_mmsdrop_latest(plugin)
-    elif origin == "github":
-        result = fetch_github_latest(plugin, token, last_modified)
-    else:
+    if origin != "github":
         print(f"Unknown origin: {origin}")
         return False
+    result = fetch_github_latest(plugin, token, last_modified)
     
     if result is None:
         return False
