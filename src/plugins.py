@@ -175,7 +175,12 @@ def run():
         save_plugins(plugins)
     
     save_last_modified(last_modified)
-    
+
+    swiftly_vdf = CS2_DIR / "addons" / "metamod" / "swiftlys2.vdf"
+    if swiftly_vdf.exists():
+        swiftly_vdf.unlink()
+        print(f"Removed {swiftly_vdf}")
+
     return 0
 
 if __name__ == "__main__":
