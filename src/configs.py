@@ -40,34 +40,39 @@ def atomic_write(path: pathlib.Path, content: str):
     tmp.replace(path)
 
 # -----------------------------------------------------------------------------
-# gi: insert entries after Game_LowViolence pattern
+# gi: replace entries between Game_LowViolence and Game csgo
 # -----------------------------------------------------------------------------
 
 def apply_gi(path: pathlib.Path, entries: dict):
     with open(path, 'r') as f:
         lines = f.readlines()
-    
-    # find insertion point after Game_LowViolence
-    pattern = "Game_LowViolence"
+
+    start_prefix = "Game_LowViolence"
+    end_pattern = "Game csgo"
     insert_idx = None
+    end_idx = None
+
     for i, line in enumerate(lines):
-        if pattern in line:
+        normalized_line = " ".join(line.split())
+
+        if insert_idx is None and normalized_line.startswith(start_prefix):
             insert_idx = i + 1
+            continue
+        if insert_idx is not None and normalized_line == end_pattern:
+            end_idx = i
             break
-    
+
     if insert_idx is None:
-        print(f"Pattern '{pattern}' not found in {path}")
+        print(f"Pattern starting with '{start_prefix}' not found in {path}")
         return False
-    
+
+    if end_idx is None:
+        print(f"Pattern '{end_pattern}' not found in {path}")
+        return False
+
     entry_lines = [v + "\n" for v in entries.values()]
-    
-    # check if already present
-    existing = lines[insert_idx:insert_idx + len(entry_lines)]
-    if existing == entry_lines:
-        print(f"{path.name} already up to date")
-        return True
-    
-    lines[insert_idx:insert_idx] = entry_lines
+
+    lines[insert_idx:end_idx] = entry_lines
     atomic_write(path, ''.join(lines))
     print(f"Updated {path.name}")
     return True
