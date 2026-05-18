@@ -83,7 +83,7 @@ def fetch_github_release(plugin: dict, token: str) -> tuple[str, str, str | None
     owner, repo = plugin["name"].split("/")
     asset_pattern = plugin["asset"]
 
-    url = f"https://api.github.com/repos/{owner}/{repo}/releases"
+    url = f"https://api.github.com/repos/{owner}/{repo}/releases?per_page=1"
     headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     cached_etag = plugin.get("etag")
