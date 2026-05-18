@@ -77,8 +77,8 @@ def download_and_extract(url: str, destination: pathlib.Path, depth: int = 0) ->
 def fetch_github_release(plugin: dict, token: str) -> tuple[str, str, str | None] | None:
     """Fetch the latest matching release from GitHub.
 
-    Returns (tag, download_url, new_last_modified) or None if unchanged / failed.
-    Uses conditional requests (If-Modified-Since) to avoid burning API rate limit.
+    Returns (tag, download_url, new_etag) or None if unchanged / failed.
+    Uses ETag / If-None-Match for conditional requests to avoid burning API rate limit.
     """
     owner, repo = plugin["name"].split("/")
     asset_pattern = plugin["asset"]
@@ -86,9 +86,9 @@ def fetch_github_release(plugin: dict, token: str) -> tuple[str, str, str | None
     url = f"https://api.github.com/repos/{owner}/{repo}/releases"
     headers = {"Authorization": f"Bearer {token}"} if token else {}
 
-    cached_date = plugin.get("last_modified")
-    if cached_date:
-        headers["If-Modified-Since"] = cached_date
+    cached_etag = plugin.get("etag")
+    if cached_etag:
+        headers["If-None-Match"] = cached_etag
 
     response = requests.get(url, headers=headers)
 
@@ -100,7 +100,7 @@ def fetch_github_release(plugin: dict, token: str) -> tuple[str, str, str | None
         print(f"Failed to fetch releases for {repo}: {response.status_code}")
         return None
 
-    new_last_modified = response.headers.get("Last-Modified")
+    new_etag = response.headers.get("ETag")
 
     for release in response.json():
         if release.get("draft"):
@@ -108,7 +108,7 @@ def fetch_github_release(plugin: dict, token: str) -> tuple[str, str, str | None
         tag = release["tag_name"]
         for asset in release.get("assets", []):
             if match_asset(asset["name"], asset_pattern):
-                return (tag, asset["browser_download_url"], new_last_modified)
+                return (tag, asset["browser_download_url"], new_etag)
 
     print(f"Failed to match asset pattern '{asset_pattern}' in {repo} releases")
     return None
@@ -126,13 +126,12 @@ def update_plugin(plugin: dict, token: str) -> dict | None:
     if result is None:
         return None
 
-    tag, url, new_last_modified = result
+    tag, url, new_etag = result
 
     if plugin.get("tag") == tag:
         print(f"{name} is up to date ({tag})")
-        # Persist the refreshed timestamp even when version is unchanged
-        if new_last_modified and new_last_modified != plugin.get("last_modified"):
-            return {**plugin, "last_modified": new_last_modified}
+        if new_etag and new_etag != plugin.get("etag"):
+            return {**plugin, "etag": new_etag}
         return None
 
     print(f"Updating {name} to {tag}")
@@ -142,7 +141,7 @@ def update_plugin(plugin: dict, token: str) -> dict | None:
         return None
 
     print(f"Updated {name} to {tag}")
-    return {**plugin, "tag": tag, "last_modified": new_last_modified}
+    return {**plugin, "tag": tag, "etag": new_etag}
 
 
 def run():
