@@ -20,7 +20,7 @@ ENV PYTHONUNBUFFERED=1
 
 COPY --chown=steam:steam src/*.py /src/
 
-HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
+HEALTHCHECK --interval=60s --timeout=5s --retries=3 --start-period=3m \
     CMD python3 /src/healthcheck.py
 
 ENTRYPOINT ["python3", "/src/entrypoint.py"]
