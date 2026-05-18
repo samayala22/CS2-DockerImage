@@ -5,61 +5,52 @@ import os
 import pathlib
 import shutil
 import requests
-import helpers
 import json
+from paths import CS2_ROOT, PLUGINS_FILE
 
-CS2_ROOT = pathlib.Path("/home/steam/cs2")
-SERVER_CONFIG_DIR = pathlib.Path("/server-config")
-CS2_DIR = CS2_ROOT / "game" / "csgo"
-PLUGINS_FILE = SERVER_CONFIG_DIR / "plugins.json"
-LAST_MODIFIED_FILE = SERVER_CONFIG_DIR / ".plugins_last_modified.json"
 
 def load_plugins() -> list[dict]:
-    """Load plugins configuration from plugins.json."""
     with open(PLUGINS_FILE, "r") as f:
         return json.load(f)
 
+
 def save_plugins(plugins: list[dict]):
-    """Save plugins configuration to plugins.json."""
     with open(PLUGINS_FILE, "w") as f:
         json.dump(plugins, f, indent=4)
 
-def load_last_modified() -> dict[str, str]:
-    """Load cached GitHub Last-Modified timestamps from disk."""
-    try:
-        with open(LAST_MODIFIED_FILE, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-def save_last_modified(last_modified: dict[str, str]):
-    """Save GitHub Last-Modified timestamps to disk."""
-    with open(LAST_MODIFIED_FILE, "w") as f:
-        json.dump(last_modified, f, indent=4)
 
 def match_asset(name: str, pattern: str) -> bool:
-    """Match asset name against a pattern with wildcard support."""
     if "*" in pattern:
         parts = pattern.split("*")
         return all(p in name for p in parts if p)
     return pattern in name
 
+
+def _download_file(url: str, dest_dir: pathlib.Path) -> pathlib.Path:
+    fp = dest_dir / url.split("/")[-1]
+    tmp = fp.with_suffix(fp.suffix + ".tmp")
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        with open(tmp, "wb") as f:
+            for chunk in r.iter_content(chunk_size=16384):
+                f.write(chunk)
+    tmp.replace(fp)
+    return fp
+
+
 def download_and_extract(url: str, destination: pathlib.Path, depth: int = 0) -> pathlib.Path | None:
-    """Download archive and extract to destination with optional depth handling."""
     try:
-        fp = helpers.fetch(url, destination)
+        fp = _download_file(url, destination)
     except Exception as e:
         print(f"Failed to download: {e}")
         return None
-    
-    # extract to temp directory first if depth > 0
+
     if depth > 0:
         extract_dir = destination / f"_temp_extract_{fp.stem}"
         extract_dir.mkdir(exist_ok=True)
         shutil.unpack_archive(fp, extract_dir)
         fp.unlink()
-        
-        # find the n-th depth folder and copy contents
+
         target = extract_dir
         for _ in range(depth):
             subdirs = [d for d in target.iterdir() if d.is_dir()]
@@ -67,121 +58,101 @@ def download_and_extract(url: str, destination: pathlib.Path, depth: int = 0) ->
                 target = subdirs[0]
             else:
                 break
-        
-        # copy contents to destination
+
         for item in target.iterdir():
             dest_item = destination / item.name
             if item.is_dir():
                 shutil.copytree(item, dest_item, dirs_exist_ok=True)
             else:
                 shutil.copy2(item, dest_item)
-        
+
         shutil.rmtree(extract_dir)
     else:
         shutil.unpack_archive(fp, destination)
         fp.unlink()
-    
+
     return destination
 
-def fetch_github_latest(plugin: dict, token: str, last_modified: dict[str, str]) -> tuple[str, str] | None:
-    """Fetch the latest matching tag and download URL from GitHub releases.
 
-    Uses GitHub conditional requests (If-Modified-Since) so that 304
-    responses don't count against the API rate limit.
+def fetch_github_release(plugin: dict, token: str) -> tuple[str, str, str | None] | None:
+    """Fetch the latest matching release from GitHub.
+
+    Returns (tag, download_url, new_last_modified) or None if unchanged / failed.
+    Uses conditional requests (If-Modified-Since) to avoid burning API rate limit.
     """
     owner, repo = plugin["name"].split("/")
     asset_pattern = plugin["asset"]
-    plugin_key = plugin["name"]
-    
-    req_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
+
+    url = f"https://api.github.com/repos/{owner}/{repo}/releases"
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    
-    cached_date = last_modified.get(plugin_key)
+
+    cached_date = plugin.get("last_modified")
     if cached_date:
         headers["If-Modified-Since"] = cached_date
-    
-    response = requests.get(req_url, headers=headers)
-    
+
+    response = requests.get(url, headers=headers)
+
     if response.status_code == 304:
-        print(f"{plugin_key} release unchanged (cached)")
+        print(f"{plugin['name']} release unchanged (cached)")
         return None
-    
+
     if not response.ok:
-        print(f"Failed to fetch latest release for {repo}: {response.status_code}")
+        print(f"Failed to fetch releases for {repo}: {response.status_code}")
         return None
-    
-    # cache the Last-Modified timestamp
-    if "Last-Modified" in response.headers:
-        last_modified[plugin_key] = response.headers["Last-Modified"]
-    
+
+    new_last_modified = response.headers.get("Last-Modified")
+
     for release in response.json():
         if release.get("draft"):
             continue
-
         tag = release["tag_name"]
         for asset in release.get("assets", []):
             if match_asset(asset["name"], asset_pattern):
-                return (tag, asset["browser_download_url"])
+                return (tag, asset["browser_download_url"], new_last_modified)
 
     print(f"Failed to match asset pattern '{asset_pattern}' in {repo} releases")
     return None
 
-def update_plugin(plugin: dict, token: str, last_modified: dict[str, str]) -> bool:
-    """Update a single plugin based on its origin."""
+
+def update_plugin(plugin: dict, token: str) -> dict | None:
+    """Check and apply an update for a single plugin.
+
+    Returns an updated plugin dict (with new tag and/or last_modified) on success,
+    or None if nothing changed.
+    """
     name = plugin["name"]
-    origin = plugin.get("origin", "github")
-    old_tag = plugin["tag"]
-    
-    # fetch latest release info
-    if origin != "github":
-        print(f"Unknown origin: {origin}")
-        return False
-    result = fetch_github_latest(plugin, token, last_modified)
-    
+
+    result = fetch_github_release(plugin, token)
     if result is None:
-        return False
-    
-    tag, url = result
-    
-    # check if update needed
-    if old_tag == tag:
+        return None
+
+    tag, url, new_last_modified = result
+
+    if plugin.get("tag") == tag:
         print(f"{name} is up to date ({tag})")
-        return False
-    
-    # download and extract
+        # Persist the refreshed timestamp even when version is unchanged
+        if new_last_modified and new_last_modified != plugin.get("last_modified"):
+            return {**plugin, "last_modified": new_last_modified}
+        return None
+
     print(f"Updating {name} to {tag}")
     destination = CS2_ROOT / pathlib.Path(plugin["destination"].replace("root/", ""))
-    
-    if download_and_extract(url, destination, plugin.get("depth", 0)):
-        plugin["tag"] = tag
-        print(f"Updated {name} to {tag}")
-        return True
-    
-    return False
+
+    if download_and_extract(url, destination, plugin.get("depth", 0)) is None:
+        return None
+
+    print(f"Updated {name} to {tag}")
+    return {**plugin, "tag": tag, "last_modified": new_last_modified}
+
 
 def run():
-    """Main function to update all plugins."""
     print("Checking for plugin updates...")
     token = os.getenv("GITHUB_APIKEY", "")
     plugins = load_plugins()
-    last_modified = load_last_modified()
-    
-    updated = False
-    for plugin in plugins:
-        if update_plugin(plugin, token, last_modified):
-            updated = True
-    
-    if updated:
-        save_plugins(plugins)
-    
-    save_last_modified(last_modified)
 
-    swiftly_vdf = CS2_DIR / "addons" / "metamod" / "swiftlys2.vdf"
-    if swiftly_vdf.exists():
-        swiftly_vdf.unlink()
-        print(f"Removed {swiftly_vdf}")
+    updated_plugins = [update_plugin(p, token) or p for p in plugins]
+    save_plugins(updated_plugins)
 
-    return 0
 
 if __name__ == "__main__":
     run()

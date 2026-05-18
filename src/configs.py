@@ -2,10 +2,7 @@
 from __future__ import annotations
 
 import os, re, pathlib, pyjson5, json
-
-CS2_ROOT = pathlib.Path("/home/steam/cs2")
-SERVER_CONFIG_DIR = pathlib.Path("/server-config")
-CONFIGS_FILE = SERVER_CONFIG_DIR / "configs.json"
+from paths import CS2_ROOT, CONFIGS_FILE
 
 ENV_PATTERN = re.compile(r'\{env\.([^}]+)\}')
 
@@ -167,7 +164,7 @@ FORMAT_HANDLERS = {
     "jsonc": apply_jsonc,
     "ini": apply_ini,
 }
-
+ 
 def apply_config(config: dict) -> bool:
     file_path = CS2_ROOT / pathlib.Path(config["file"].replace("root/", ""))
     if not file_path.exists():
