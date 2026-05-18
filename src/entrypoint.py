@@ -1,11 +1,24 @@
 #!/usr/bin/env python3
 
 import os, subprocess, pathlib, random
+import requests
 import plugins
 import configs
 from paths import CS2_ROOT, STEAMCMD_DIR, CS2_GAME_DIR
 
 WORKSHOP_MAPS = ["3070194623", "3121168339", "3102712799", "3162361624", "3374560468", "3160291769", "3344417199", "3250581189", "3082213334", "3104579274", "3514400945", "3540061470", "3429375699", "3164403123", "3534437146", "3434238689", "3428669060", "3490455192", "3353950265", "3250581189"]
+
+
+def fetch_random_map() -> str:
+    try:
+        response = requests.get("https://api.cs2kz.org/maps", timeout=10)
+        response.raise_for_status()
+        maps = response.json().get("values", [])
+        if maps:
+            return str(random.choice(maps)["workshop_id"])
+    except Exception as e:
+        print(f"Failed to fetch maps from API, falling back to hardcoded list: {e}")
+    return random.choice(WORKSHOP_MAPS)
 
 
 def ensure_steamcmd():
@@ -48,7 +61,7 @@ def server_start():
         str(CS2_ROOT / "game/cs2.sh"),
         "--graphics-provider", "", "--", "-dedicated", "-port", os.environ["PORT"], "-maxplayers", "32", "-usercon",
         "+sv_setsteamaccount", os.environ["GSLT"],
-        "+exec", "cs2kz.cfg", "+map", "de_dust2", "+host_workshop_map", random.choice(WORKSHOP_MAPS)
+        "+exec", "cs2kz.cfg", "+map", "de_dust2", "+host_workshop_map", fetch_random_map()
     ]
     subprocess.run(cmd)
 
