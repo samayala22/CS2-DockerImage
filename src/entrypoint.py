@@ -45,7 +45,7 @@ def setup_steam_symlink():
 
 
 def server_update():
-    cmd = [str(STEAMCMD_DIR / "steamcmd.sh"), "+force_install_dir", str(CS2_ROOT), "+login", "anonymous", "+app_update", "730", "+quit"]
+    cmd = [str(STEAMCMD_DIR / "steamcmd.sh"), "+force_install_dir", str(CS2_ROOT), "+login", "anonymous", "+app_update", "730", "+validate", "+quit"]
     subprocess.run(cmd)
 
 
