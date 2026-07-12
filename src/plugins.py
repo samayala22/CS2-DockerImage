@@ -106,6 +106,8 @@ def fetch_github_release(plugin: dict, token: str) -> tuple[str, str, str | None
         if release.get("draft"):
             continue
         tag = release["tag_name"]
+        if "beta" in tag.lower(): 
+            continue
         for asset in release.get("assets", []):
             if match_asset(asset["name"], asset_pattern):
                 return (tag, asset["browser_download_url"], new_etag)
