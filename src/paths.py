@@ -8,3 +8,5 @@ CS2_GAME_DIR = CS2_ROOT / "game" / "csgo"
 
 PLUGINS_FILE = SERVER_CONFIG_DIR / "plugins.json"
 CONFIGS_FILE = SERVER_CONFIG_DIR / "configs.json"
+
+PLUGIN_STATE_FILE = CS2_ROOT / ".plugin-state.json"
