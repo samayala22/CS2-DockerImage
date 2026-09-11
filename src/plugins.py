@@ -96,11 +96,18 @@ def resolve_latest(plugin: dict, etag: str | None, token: str) -> Release | Lite
     """Resolve the latest release. The ETag is only ever stored after a
     successful unpinned install, so a 304 means the install is current."""
     name = plugin["name"]
+    channel = plugin.get("channel", "stable")
+    
     headers = _auth(token)
     if etag:
         headers["If-None-Match"] = etag
 
-    response = requests.get(f"{GITHUB_API}/repos/{name}/releases?per_page=1", headers=headers)
+    if channel == "stable":
+        url = f"{GITHUB_API}/repos/{name}/releases/latest"
+    else:
+        url = f"{GITHUB_API}/repos/{name}/releases?per_page=1"
+    
+    response = requests.get(url, headers=headers)
 
     if response.status_code == 304:
         return UNCHANGED
@@ -108,15 +115,11 @@ def resolve_latest(plugin: dict, etag: str | None, token: str) -> Release | Lite
         print(f"{name}: failed to fetch releases: {response.status_code}")
         return None
 
-    for release in response.json():
-        if release.get("draft"):
-            continue
-        tag = release["tag_name"]
-        if "beta" in tag.lower():
-            continue
+    payload = response.json()
+    for release in [payload] if channel == "stable" else payload:
         url = _asset_url(release, plugin["asset"])
         if url:
-            return Release(tag, url, response.headers.get("ETag"))
+            return Release(release["tag_name"], url, response.headers.get("ETag"))
 
     print(f"{name}: no asset matching '{plugin['asset']}' in latest release")
     return None
